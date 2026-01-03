@@ -1,0 +1,122 @@
+// ==========================
+// UltraFire Store - Server
+// ==========================
+
+import express from "express";
+import mercadopago from "mercadopago";
+
+const app = express();
+app.use(express.json());
+
+// 🔑 COLOQUE SEU ACCESS TOKEN AQUI
+mercadopago.configure({
+  access_token: "SEU_ACCESS_TOKEN_MERCADO_PAGO"
+});
+
+// ==========================
+// SITE (FRONT-END)
+// ==========================
+app.get("/", (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>UltraFire Store</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{background:#0b0b0b;color:#fff;font-family:Arial}
+.container{max-width:400px;margin:40px auto;background:#111;padding:20px;border-radius:12px}
+h1{color:#a855f7;text-align:center}
+input,select,button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none}
+input,select{background:#1c1c1c;color:#fff}
+button{background:linear-gradient(90deg,#7c3aed,#a855f7);color:#fff;font-weight:bold}
+.info{text-align:center;color:#aaa;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🔥 UltraFire Store</h1>
+
+<input id="playerId" placeholder="ID do Free Fire">
+<select id="pacote">
+  <option value="4.99">100 Diamantes - R$4,99</option>
+  <option value="14.99">310 Diamantes - R$14,99</option>
+  <option value="24.99">520 Diamantes - R$24,99</option>
+</select>
+
+<button onclick="pagar()">Pagar com Pix</button>
+
+<div id="pix"></div>
+
+<div class="info">
+Entrega automática após confirmação do Pix
+</div>
+</div>
+
+<script>
+async function pagar(){
+  const res = await fetch("/criar-pix", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      valor: document.getElementById("pacote").value
+    })
+  });
+
+  const data = await res.json();
+  document.getElementById("pix").innerHTML = 
+    "<p>Escaneie o QR Code:</p>" +
+    "<img width='200' src='data:image/png;base64,"+data.qr_base64+"'>" +
+    "<p>Ou copie:</p><textarea>"+data.qr_code+"</textarea>";
+}
+</script>
+</body>
+</html>
+`);
+});
+
+// ==========================
+// CRIAR PIX
+// ==========================
+app.post("/criar-pix", async (req, res) => {
+  const valor = Number(req.body.valor);
+
+  const pagamento = await mercadopago.payment.create({
+    transaction_amount: valor,
+    description: "Diamantes Free Fire - UltraFire Store",
+    payment_method_id: "pix",
+    payer: {
+      email: "cliente@ultrafire.com"
+    },
+    notification_url: "https://SEUSITE.com/webhook"
+  });
+
+  res.json({
+    qr_code: pagamento.body.point_of_interaction.transaction_data.qr_code,
+    qr_base64: pagamento.body.point_of_interaction.transaction_data.qr_code_base64
+  });
+});
+
+// ==========================
+// WEBHOOK PIX (CONFIRMAÇÃO)
+// ==========================
+app.post("/webhook", async (req, res) => {
+  const paymentId = req.body.data.id;
+
+  const pagamento = await mercadopago.payment.get(paymentId);
+
+  if (pagamento.body.status === "approved") {
+    console.log("✅ Pix confirmado!");
+
+    // 🚀 AQUI entra a API do fornecedor oficial
+    // enviarDiamantes(playerId, quantidade)
+  }
+
+  res.sendStatus(200);
+});
+
+// ==========================
+app.listen(3000, () => {
+  console.log("🔥 UltraFire Store rodando em http://localhost:3000");
+});
